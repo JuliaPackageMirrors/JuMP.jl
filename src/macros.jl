@@ -156,7 +156,16 @@ macro setObjective(m, x)
         setObjective($(esc(m)), aff)
     end
 end
-        
+
+# TODO: this is a runtime check.
+# It may be possible to do compile time instead.
+function checkdefined(varname)
+    quote
+        if isdefined($(Expr(:quote,varname)))
+            warn(string("Redefining existing identifier ", $(Expr(:quote,varname)), ". This should be avoided."))
+        end
+    end
+end
 
 macro defVar(m, x, extra...)
     m = esc(m)
@@ -206,6 +215,7 @@ macro defVar(m, x, extra...)
     if isa(var,Symbol)
         # easy case
         return quote
+            $(checkdefined(var))
             $(esc(var)) = Variable($m,$lb,$ub,$t,$(string(var)))
             nothing
         end
@@ -239,7 +249,8 @@ macro defVar(m, x, extra...)
         end
         
         mac = Expr(:macrocall,symbol("@gendict"),varname,:Variable,idxsets...)
-        code = quote 
+        code = quote
+            $(checkdefined(var.args[1]))
             $mac
             $code
             nothing
