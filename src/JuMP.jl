@@ -64,6 +64,9 @@ type Model
     colUpper::Vector{Float64}
     colCat::Vector{Int}
 
+    # Row data
+    rowNames::Vector{String}
+
     # Solution data
     objVal
     colVal::Vector{Float64}
