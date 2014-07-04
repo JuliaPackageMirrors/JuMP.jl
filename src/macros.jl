@@ -137,15 +137,18 @@ macro addConstraint(m, x, extra...)
 
     # Build up machinery for looping over index sets, if needed
     refcall = gensym()  # Default
+    rowname = string()
     if isa(c,Symbol)
         # Just creating a simple ConstraintRefs (not indexed)
         refcall = esc(c)
+        rowname = string(c)
     elseif isexpr(c,:ref)
         # Creating an indexed set of ConstraintRefs
         cname = esc(c.args[1])
         idxvars = {}
         idxsets = {}
         refcall = Expr(:ref,cname)
+        rowname = Expr(:string,string(c.args[1])*"[")
         for s in c.args[2:end]
             if isa(s,Expr) && (s.head == :(=) || s.head == :in)
                 idxvar = s.args[1]
@@ -157,6 +160,13 @@ macro addConstraint(m, x, extra...)
             push!(idxvars, idxvar)
             push!(idxsets, idxset)
             push!(refcall.args, esc(idxvar))
+            push!(rowname.args, esc(idxvar))
+            push!(rowname.args, ",")
+        end
+        if length(rowname.args) == 1
+            push!(rowname.args,"]")
+        else
+            rowname.args[end] = "]"
         end
     elseif c != nothing
         # Something in there, but we don't know what
@@ -175,7 +185,7 @@ macro addConstraint(m, x, extra...)
         code = quote
             aff = AffExpr()
             $(parseExpr(lhs, :aff, 1.0))
-            $(refcall) = addConstraint($m, $(x.args[2])(aff,0) )
+            $(refcall) = addConstraint($m, $(x.args[2])(aff,0); rowname=$rowname)
         end
     elseif length(x.args) == 5
         # Ranged row
@@ -194,7 +204,7 @@ macro addConstraint(m, x, extra...)
             $(parseExpr(x.args[3],:aff,1.0))
             $(refcall) = addConstraint($m, 
                 LinearConstraint(aff,$(esc(lb))-aff.constant,
-                    $(esc(ub))-aff.constant))
+                    $(esc(ub))-aff.constant); rowname=$rowname)
         end
     else
         # Unknown

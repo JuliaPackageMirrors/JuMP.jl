@@ -65,6 +65,7 @@ type Model
     colCat::Vector{Int}
 
     # Row data
+    numRows::Int
     rowNames::Vector{String}
 
     # Solution data
@@ -108,7 +109,7 @@ function Model(;solver=nothing)
     if solver == nothing
         # use default solvers
         Model(QuadExpr(),:Min,LinearConstraint[], QuadConstraint[],SOSConstraint[],
-              0,String[],Float64[],Float64[],Int[],
+              0,String[],Float64[],Float64[],Int[],0,String[],
               0,Float64[],Float64[],Float64[],nothing,UnsetSolver(),false,
               nothing,nothing,nothing,JuMPDict[],nothing,IndexedVector(Float64,0),nothing,Dict{Symbol,Any}())
     else
@@ -117,7 +118,7 @@ function Model(;solver=nothing)
         end
         # user-provided solver must support problem class
         Model(QuadExpr(),:Min,LinearConstraint[], QuadConstraint[],SOSConstraint[],
-              0,String[],Float64[],Float64[],Int[],
+              0,String[],Float64[],Float64[],Int[],0,String[],
               0,Float64[],Float64[],Float64[],nothing,solver,false,
               nothing,nothing,nothing,JuMPDict[],nothing,IndexedVector(Float64,0),nothing,Dict{Symbol,Any}())
     end
@@ -407,7 +408,7 @@ end
 # -Inf) and upper bound (possibly Inf).
 typealias LinearConstraint GenericRangeConstraint{AffExpr}
 
-function addConstraint(m::Model, c::LinearConstraint)
+function addConstraint(m::Model, c::LinearConstraint; rowname="")
     push!(m.linconstr,c)
     if m.internalModelLoaded 
         if method_exists(MathProgBase.addconstr!, (typeof(m.internalModel),Vector{Int},Vector{Float64},Float64,Float64))
@@ -418,7 +419,10 @@ function addConstraint(m::Model, c::LinearConstraint)
             m.internalModelLoaded = false
         end
     end
-    return ConstraintRef{LinearConstraint}(m,length(m.linconstr))
+    rowname == "" && (rowname = "_row$(m.numRows+1)")
+    push!(m.rowNames, rowname)
+    m.numRows += 1
+    return ConstraintRef{LinearConstraint}(m,m.numRows)
 end
 
 # Copy utility function, not exported
