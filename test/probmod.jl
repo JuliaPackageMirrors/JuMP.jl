@@ -11,17 +11,20 @@
 # Testing problem modification
 # Must be run as part of runtests.jl, as it needs a list of solvers.
 #############################################################################
-using JuMP, FactCheck
+using JuMP, FactCheck, BaseTestNext
 
 # If solvers not loaded, load them (i.e running just these tests)
 !isdefined(:lp_solvers) && include("solvers.jl")
 
 const TOL = 1e-4
+approx_eq(x::Variable, y) = isapprox(getValue(x), y, atol=TOL)
+approx_eq(m::Model, y) = isapprox(getObjectiveValue(m), y, atol=TOL)
 
-facts("[probmod] Testing problem modification basics") do
-for solver in lp_solvers
-context("With solver $(typeof(solver))") do
 
+@testset "Problem modification" begin
+print_with_color(:magenta, "Problem modification\n")
+
+@testset "LP Model (with $typeof(solver))" for solver in lp_solvers
     # max 1.1x + 1.0y
     # st     x +    y <= 3
     #     0 <= x <= 3
@@ -30,12 +33,12 @@ context("With solver $(typeof(solver))") do
     m = Model(solver=solver)
     @defVar(m, 0 <= x <= 3)
     @defVar(m, 1 <= y <= 3)
-    @setObjective(m, :Max, 1.1x + 1.0y)
+    @setObjective(m, Max, 1.1x + 1.0y)
     maincon = @addConstraint(m, x + y <= 3)
-    @fact solve(m) --> :Optimal
-    @fact m.internalModelLoaded --> true
-    @fact getValue(x) --> roughly(2.0, TOL)
-    @fact getValue(y) --> roughly(1.0, TOL)
+    @test solve(m) == :Optimal
+    @test m.internalModelLoaded
+    @test approx_eq(x, 2.0)
+    @test approx_eq(y, 1.0)
 
     # Test adding a variable
     # max 1.1x + 1.0y + 100.0z
@@ -44,13 +47,15 @@ context("With solver $(typeof(solver))") do
     #     1 <= y <= 3
     #     0 <= z <= 5
     # x* = 0, y* = 1, z* = 2
-    @defVar(m, 0 <= z <= 5, objective=100.0, inconstraints=[maincon], coefficients=[1.0])
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(0.0, TOL)
-    @fact getValue(y) --> roughly(1.0, TOL)
-    @fact getValue(z) --> roughly(2.0, TOL)
-    @fact getObjectiveValue(m) --> roughly(201.0, TOL)
-
+    @defVar(m, 0 <= z <= 5,
+            objective=100.0,
+            inconstraints=[maincon],
+            coefficients=[1.0])
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 0.0)
+    @test approx_eq(y, 1.0)
+    @test approx_eq(z, 2.0)
+    @test approx_eq(m, 201.0)
 
     # Test changing bounds
     # max 1.1x + 1.0y + 100.0z
@@ -61,19 +66,15 @@ context("With solver $(typeof(solver))") do
     # x* = 1, y* = 0, z* = 2
     setLower(y, 0.0)
     setUpper(z, 2.0)
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(1.0, TOL)
-    @fact getValue(y) --> roughly(0.0, TOL)
-    @fact getValue(z) --> roughly(2.0, TOL)
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 1.0)
+    @test approx_eq(y, 0.0)
+    @test approx_eq(z, 2.0)
     m.internalModelLoaded = false
-end
-end
-end
+end  # "LP Model (with $solver)"
 
 
-facts("[probmod] Testing problem modification part two") do
-for solver in ip_solvers
-context("With solver $(typeof(solver))") do
+@testset "IP Model (with $typeof(solver))" for solver in ip_solvers
     # max 1.1x + 1.0y + 100.0z
     # st     x +    y +      z <= 3
     #     0 <= x <= 3
@@ -83,9 +84,9 @@ context("With solver $(typeof(solver))") do
     @defVar(m, 0 <= x <= 3)
     @defVar(m, 0 <= y <= 3)
     @defVar(m, 0 <= z <= 0)
-    @setObjective(m, :Max, 1.1x + 1.0y + 100.0z)
+    @setObjective(m, Max, 1.1x + 1.0y + 100.0z)
     maincon = @addConstraint(m, x + y + z <= 3)
-    @fact solve(m) --> :Optimal
+    @test solve(m) == :Optimal
 
     # Test changing problem type
     # max 1.1x + 1.0y + 100.0z
@@ -95,11 +96,11 @@ context("With solver $(typeof(solver))") do
     #     0 <= z <= 1.5, Integer
     # x* = 2, y* = 0, z* = 1
     setUpper(z, 1.5)
-    m.colCat[3] = :Int
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(2.0, TOL)
-    @fact getValue(y) --> roughly(0.0, TOL)
-    @fact getValue(z) --> roughly(1.0, TOL)
+    setCategory(z, :Int)
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 2.0)
+    @test approx_eq(y, 0.0)
+    @test approx_eq(z, 1.0)
 
     # Test changing constraint bound (<= constraint)
     # max 1.1x + 1.0y + 100.0z
@@ -109,10 +110,10 @@ context("With solver $(typeof(solver))") do
     #     0 <= z <= 1.5, Integer
     # x* = 1, y* = 0, z* = 1
     chgConstrRHS(maincon, 2.0)
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(1.0, TOL)
-    @fact getValue(y) --> roughly(0.0, TOL)
-    @fact getValue(z) --> roughly(1.0, TOL)
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 1.0)
+    @test approx_eq(y, 0.0)
+    @test approx_eq(z, 1.0)
 
     # Test adding a constraint
     # max 1.1x + 1.0y + 100.0z
@@ -123,10 +124,10 @@ context("With solver $(typeof(solver))") do
     #     0 <= z <= 1.5, Integer
     # x* = 0, y* = 2, z* = 0
     xz0ref = @addConstraint(m, x + z <=0)
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(0.0, TOL)
-    @fact getValue(y) --> roughly(2.0, TOL)
-    @fact getValue(z) --> roughly(0.0, TOL)
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 0.0)
+    @test approx_eq(y, 2.0)
+    @test approx_eq(z, 0.0)
 
     # Test changing constraint bound (>= constraint)
     # max 1.1x + 1.0y + 100.0z
@@ -139,15 +140,15 @@ context("With solver $(typeof(solver))") do
     # x* = 1, y* = 0, z* = 1
     chgConstrRHS(xz0ref, 2.0)
     xyg0ref = @addConstraint(m, x + y >= 0)
-    @fact solve(m) --> :Optimal
+    @test solve(m) == :Optimal
     chgConstrRHS(xyg0ref, 1)
-    @fact solve(m) --> :Optimal
-    @fact getValue(x) --> roughly(1.0, TOL)
-    @fact getValue(y) --> roughly(0.0, TOL)
-    @fact getValue(z) --> roughly(1.0, TOL)
-end
-end
-end
+    @test solve(m) == :Optimal
+    @test approx_eq(x, 1.0)
+    @test approx_eq(y, 0.0)
+    @test approx_eq(z, 1.0)
+end  # "IP Model (with $solver)"
+
+end  # "Problem modification"
 
 
 facts("[probmod] Test adding a range constraint and modifying it") do
